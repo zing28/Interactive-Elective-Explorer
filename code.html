@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Elective Explorer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: Deep Midnight (Dark Mode) with Subtle Gold & Aqua Accents -->
+    <!-- Application Structure Plan: A dashboard-style SPA. The top section contains interactive controls (filters, search, sort). The main content area is a two-column grid: the left displays dynamic charts (category breakdown, strength distribution), and the right displays a filterable list of course cards. A new, prominent section presents the top 5 strategic recommendations with detailed justifications, separated for professional and open electives. This structure was chosen to provide an immediate high-level overview (charts), allow for detailed exploration (filterable list), and offer direct, actionable guidance (recommendations), thus creating a user flow from general understanding to specific, informed decision-making. The top 5 section is made more prominent to directly address the user's core need for strategic guidance. -->
+    <!-- Visualization & Content Choices: 
+        - Course Categories -> Goal: Inform -> Viz: Donut Chart -> Interaction: Hover -> Justification: Quick visual breakdown of course types -> Library: Chart.js/Canvas.
+        - Course Strength -> Goal: Compare -> Viz: Bar Chart -> Interaction: Filters with list -> Justification: Easily compare student capacity and identify high-demand vs. niche courses -> Library: Chart.js/Canvas.
+        - Full Course List -> Goal: Organize/Explore -> Viz: Interactive Cards -> Interaction: Filter, Sort, Search -> Justification: Efficiently find specific courses and details -> Method: HTML/CSS/JS.
+        - Strategic Picks (Top 5) -> Goal: Guide -> Viz: Highlighted Info Cards with detailed 'Why' -> Interaction: Static, prominent display -> Justification: Directly addresses user's goal of choosing for career/salary growth, translating report analysis into clear, actionable recommendations with enhanced detail. -> Method: HTML/CSS.
+    -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .chart-container { position: relative; width: 100%; max-width: 500px; margin-left: auto; margin-right: auto; height: 320px; max-height: 400px; }
+        @media (min-width: 768px) { .chart-container { height: 350px; } }
+        .fade-in { animation: fadeIn 0.5s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .card-enter { animation: cardEnter 0.3s ease-out; }
+        @keyframes cardEnter { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Premium Glow for Boxes */
+        @keyframes premium-glow {
+            0% { box-shadow: 0 0 10px rgba(0, 200, 200, 0.3), 0 0 20px rgba(0, 200, 200, 0.2); } /* Soft Aqua */
+            50% { box-shadow: 0 0 10px rgba(255, 215, 0, 0.3), 0 0 20px rgba(255, 215, 0, 0.2); } /* Soft Gold */
+            100% { box-shadow: 0 0 10px rgba(0, 200, 200, 0.3), 0 0 20px rgba(0, 200, 200, 0.2); }
+        }
+        .glowing-box {
+            animation: premium-glow 6s infinite alternate ease-in-out;
+            transition: box-shadow 0.3s ease-in-out; 
+        }
+
+        /* Cursor Glow */
+        #cursor-glow {
+            position: fixed;
+            width: 60px; /* Slightly larger glow */
+            height: 60px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(255, 60, 60, 0.3) 0%, rgba(255, 60, 60, 0) 70%); /* Softer red */
+            pointer-events: none; 
+            transform: translate(-50%, -50%); 
+            z-index: 9999;
+            filter: blur(15px); /* More blur for a softer effect */
+            transition: opacity 0.3s ease-out;
+            opacity: 0; 
+        }
+        body:hover #cursor-glow {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body class="bg-gray-950 text-gray-100">
+
+    <div id="cursor-glow"></div>
+
+    <main class="container mx-auto px-4 py-8 md:py-12">
+        <header class="text-center mb-12">
+            <h1 class="text-4xl md:text-5xl font-extrabold text-white tracking-tight">Interactive Elective Explorer</h1>
+            <p class="mt-4 text-lg text-gray-300 max-w-2xl mx-auto">Your premium guide to strategically choosing Professional & Open Electives for AY 2025-26 ODD, maximizing future tech growth and earning potential.</p>
+            <p class="mt-2 text-sm text-gray-400">Developed by Sam</p>
+        </header>
+
+        <div class="bg-gray-900 p-6 rounded-2xl glowing-box mb-10 border border-gray-800">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+                <div class="md:col-span-1">
+                    <div id="filter-buttons" class="flex flex-wrap gap-2" role="group">
+                        <button data-filter="all" class="filter-btn bg-blue-600 text-white px-5 py-2 rounded-xl font-semibold shadow-md hover:bg-blue-700 transition-colors duration-200 w-full sm:w-auto">All Electives</button>
+                        <button data-filter="Professional Elective" class="filter-btn bg-gray-700 text-gray-200 px-5 py-2 rounded-xl font-semibold border border-gray-600 hover:bg-gray-600 transition-colors duration-200 w-full sm:w-auto">Professional</button>
+                        <button data-filter="Open Elective" class="filter-btn bg-gray-700 text-gray-200 px-5 py-2 rounded-xl font-semibold border border-gray-600 hover:bg-gray-600 transition-colors duration-200 w-full sm:w-auto">Open</button>
+                    </div>
+                </div>
+                <div class="md:col-span-2">
+                    <div class="flex flex-col sm:flex-row gap-4">
+                        <input type="text" id="search-input" placeholder="🔎 Search by course title or code..." class="w-full px-5 py-2 border border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-800 text-white placeholder-gray-400 outline-none">
+                        <select id="sort-select" class="w-full sm:w-56 px-5 py-2 border border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-800 text-white outline-none">
+                            <option value="default">Sort by Default</option>
+                            <option value="strength-desc">Strength (High to Low)</option>
+                            <option value="strength-asc">Strength (Low to High)</option>
+                            <option value="title-asc">Title (A-Z)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-5 gap-8">
+            <aside class="lg:col-span-2 space-y-8">
+                <div class="bg-gray-900 p-6 rounded-2xl glowing-box fade-in border border-gray-800">
+                    <h2 class="text-xl font-bold mb-4 text-center text-white">Course Category Breakdown</h2>
+                    <p class="text-center text-gray-300 text-sm mb-4">A visual overview of the distribution between Professional and Open Electives.</p>
+                    <div class="chart-container">
+                        <canvas id="categoryChart"></canvas>
+                    </div>
+                </div>
+                <div class="bg-gray-900 p-6 rounded-2xl glowing-box fade-in border border-gray-800">
+                    <h2 class="text-xl font-bold mb-4 text-center text-white">Seat Availability Overview</h2>
+                    <p class="text-center text-gray-300 text-sm mb-4">Understand the maximum student capacity for filtered courses, highlighting popular or niche options.</p>
+                     <div class="chart-container h-96">
+                        <canvas id="strengthChart"></canvas>
+                    </div>
+                </div>
+            </aside>
+
+            <section class="lg:col-span-3">
+                 <div id="course-list" class="space-y-4">
+                 </div>
+            </section>
+        </div>
+
+        <section id="top-recommendations" class="mt-20">
+            <div class="text-center mb-12">
+                <h2 class="text-3xl md:text-4xl font-extrabold text-white tracking-tight">Top 5 Electives for Future Tech Leadership</h2>
+                <p class="mt-4 text-lg text-gray-300 max-w-3xl mx-auto">These courses are meticulously selected for their alignment with high-growth tech trends and potential for maximizing your long-term career earnings.</p>
+                <p class="mt-4 text-md text-gray-400 max-w-3xl mx-auto font-medium">Your strategic choices, like those made by Sam, are pivotal in shaping the future tech market. By aligning your education with high-growth areas, you become a key contributor to innovation and a highly valued professional in the evolving digital landscape.</p>
+            </div>
+            
+            <div class="space-y-12">
+                <div>
+                    <h3 class="text-2xl font-bold mb-6 text-blue-400 border-b border-blue-700 pb-2">Professional Electives: Core Specialization</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                        <div class="bg-gray-900 p-7 rounded-2xl glowing-box border-l-4 border-blue-500 shadow-xl">
+                            <h4 class="font-bold text-xl text-white mb-2">Data Orchestration and Management in Cloud Ecosystems</h4>
+                            <p class="text-sm text-gray-400 mb-4">21CSE315P</p>
+                            <p class="text-gray-300 leading-relaxed"><strong>Why choose this?</strong> This course sits at the absolute nexus of the high-growth AI-Cloud-Data ecosystem. Mastery here directly translates to roles like Cloud Data Engineer and AI/ML Cloud Specialist, which are consistently among the highest-paid, with senior positions commanding salaries up to $250,000. It's about building the intelligent backbone of future enterprises.</p>
+                        </div>
+                        <div class="bg-gray-900 p-7 rounded-2xl glowing-box border-l-4 border-blue-500 shadow-xl">
+                            <h4 class="font-bold text-xl text-white mb-2">GPU Computing</h4>
+                            <p class="text-sm text-gray-400 mb-4">21CSE214T</p>
+                            <p class="text-gray-300 leading-relaxed"><strong>Why choose this?</strong> GPUs are the computational engine of modern AI and machine learning. This course provides indispensable skills for developing and optimizing complex models, directly supporting high-demand roles like Machine Learning Engineer, averaging $129,000/year. It's about empowering the next generation of intelligent systems.</p>
+                        </div>
+                        <div class="bg-gray-900 p-7 rounded-2xl glowing-box border-l-4 border-blue-500 shadow-xl">
+                            <h4 class="font-bold text-xl text-white mb-2">Linux and Container Technologies</h4>
+                             <p class="text-sm text-gray-400 mb-4">21CSE216P</p>
+                            <p class="text-gray-300 leading-relaxed"><strong>Why choose this?</strong> This is the foundational layer for operational excellence in the cloud-native era. Proficiency in Linux and containerization is crucial for deploying, managing, and scaling the very AI and cloud systems you build. DevOps Engineers, who possess these skills, average over $121,000/year, making this a vital skill for practical impact and high market value.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="text-2xl font-bold mb-6 text-purple-400 border-b border-purple-700 pb-2">Open Electives: Strategic Complementary Skills</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div class="bg-gray-900 p-7 rounded-2xl glowing-box border-l-4 border-purple-500 shadow-xl">
+                            <h4 class="font-bold text-xl text-white mb-2">Introduction to Robotics</h4>
+                            <p class="text-sm text-gray-400 mb-4">21MEO106T</p>
+                            <p class="text-gray-300 leading-relaxed"><strong>Why choose this?</strong> Combining your CSE/IT background with robotics fundamentals opens doors to a highly lucrative niche. Robotics is driven by advanced AI and automation. Top robotics roles at tech giants can command salaries up to $269,000, and its extremely small class size offers a unique, focused learning opportunity to bridge software with physical systems.</p>
+                        </div>
+                         <div class="bg-gray-900 p-7 rounded-2xl glowing-box border-l-4 border-purple-500 shadow-xl">
+                            <h4 class="font-bold text-xl text-white mb-2">Smart Sensor Systems</h4>
+                            <p class="text-sm text-gray-400 mb-4">21NTO308T</p>
+                            <p class="text-gray-300 leading-relaxed"><strong>Why choose this?</strong> This course aligns perfectly with the growth of IoT and "smart" environments. Understanding the hardware layer of sensors is vital for effective data collection, which feeds into data processing and AI applications. Intelligent Systems Engineers, who work with such systems, average over $127,000, making this a strategic choice for impactful, real-world applications of IT.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+
+    const courses = [
+        { no: 1, slot: 'B', code: '21CSE214T', title: 'GPU Computing', category: 'Professional Elective', credit: 3, strength: 120 },
+        { no: 2, slot: 'B', code: '21CSE216P', title: 'Linux and Container Technologies', category: 'Professional Elective', credit: 3, strength: 240 },
+        { no: 3, slot: 'B', code: '21CSE311J', title: 'Cloud Based Remote Sensing and GIS', category: 'Professional Elective', credit: 3, strength: 30 },
+        { no: 4, slot: 'B', code: '21CSE315P', title: 'Data Orchestration and Management in Cloud Ecosystems', category: 'Professional Elective', credit: 3, strength: 60 },
+        { no: 5, slot: 'B', code: '21CSE359T', title: 'Information Storage and Management', category: 'Professional Elective', credit: 3, strength: 140 },
+        { no: 6, slot: 'B', code: '21CSE389T', title: 'Environmental Hydrology For Data Science', category: 'Professional Elective', credit: 3, strength: 60 },
+        { no: 7, slot: 'B', code: '21IPE312P', title: 'ERP Solutions for Digital Enterprises', category: 'Professional Elective', credit: 3, strength: 195 },
+        { no: 8, slot: 'B', code: '21IPE335J', title: 'Functional Testing and Programming', category: 'Professional Elective', credit: 3, strength: 120 },
+        { no: 9, slot: 'B', code: '21IPE338P', title: 'Cloud-based enterprise system administration and configuration', category: 'Professional Elective', credit: 3, strength: 65 },
+        { no: 10, slot: 'G', code: '21ASO301T', title: 'Elements of Aeronautics', category: 'Open Elective', credit: 3, strength: 2 },
+        { no: 11, slot: 'G', code: '21AUO102T', title: 'Renewable Sources of Energy', category: 'Open Elective', credit: 3, strength: 2 },
+        { no: 12, slot: 'G', code: '21BMO121T', title: 'Fundamentals of Biomedical Engineering', category: 'Open Elective', credit: 3, strength: 2 },
+        { no: 13, slot: 'G', code: '21BTO106T', title: 'Waste to Wealth to Wheels', category: 'Open Elective', credit: 3, strength: 2 },
+        { no: 14, slot: 'G', code: '21CEO306T', title: 'Environmental Impact Assessment', category: 'Open Elective', credit: 3, strength: 2 },
+        { no: 15, slot: 'G', code: '21CEO307T', title: 'Municipal Solid Waste Management', category: 'Open Elective', credit: 3, strength: 5 },
+        { no: 16, slot: 'G', code: '21CEO308T', title: 'Disaster Mitigation and Management', category: 'Open Elective', credit: 3, strength: 5 },
+        { no: 17, slot: 'G', code: '21CEO309T', title: 'Water Pollution and its Management', category: 'Open Elective', credit: 3, strength: 5 },
+        { no: 18, slot: 'G', code: '21CEO310T', title: 'Global Warming and Climate Change', category: 'Open Elective', credit: 3, strength: 5 },
+        { no: 19, slot: 'G', code: '21CEO322T', title: 'Remote sensing and GIS applications in Engineering', category: 'Open Elective', credit: 3, strength: 2 },
+        { no: 20, slot: 'G', code: '21CEO403T', title: 'Integrated Waste Management', category: 'Open Elective', credit: 3, strength: 2 },
+        { no: 21, slot: 'G', code: '21CEO404T', title: 'Principles of Sustainable Development', category: 'Open Elective', credit: 3, strength: 2 },
+        { no: 22, slot: 'G', code: '21ECO101T', title: 'Short-Range Wireless Communication', category: 'Open Elective', credit: 3, strength: 3 },
+        { no: 23, slot: 'G', code: '21ECO102J', title: 'Electronic Circuits and Systems', category: 'Open Elective', credit: 3, strength: 3 },
+        { no: 24, slot: 'G', code: '21ECO103T', title: 'Modern Wireless Communication Systems', category: 'Open Elective', credit: 3, strength: 3 },
+        { no: 25, slot: 'G', code: '21ECO104J', title: 'PCB Design and Manufacturing', category: 'Open Elective', credit: 3, strength: 3 },
+        { no: 26, slot: 'G', code: '21ECO105T', title: 'Fiber Optics and Optoelectronics', category: 'Open Elective', credit: 3, strength: 3 },
+        { no: 27, slot: 'G', code: '21ECO106J', 'title': 'Embedded System Design using Arduino', category: 'Open Elective', credit: 3, strength: 3 },
+        { no: 28, slot: 'G', code: '21ECO107J', title: 'Embedded System Design using Raspberry Pi', category: 'Open Elective', credit: 3, strength: 3 },
+        { no: 29, slot: 'G', code: '21EEO303T', title: 'E-waste Management', category: 'Open Elective', credit: 3, strength: 3 },
+        { no: 30, slot: 'G', code: '21EEO307T', title: 'Clean and Green Energy', category: 'Open Elective', credit: 3, strength: 5 },
+        { no: 31, slot: 'G', code: '21EEO308T', title: 'Smart Cities and Communities', category: 'Open Elective', credit: 3, strength: 3 },
+        { no: 32, slot: 'G', code: '21GEO105T', title: 'Biology for Everyday life', category: 'Open Elective', credit: 3, strength: 2 },
+        { no: 33, slot: 'G', code: '21IPE401J', title: 'Capstone Program in Electronic Cooling', category: 'Open Elective', credit: 6, strength: 60 },
+        { no: 34, slot: 'G', code: '21MEO101T', title: 'Fundamentals of Composite Materials', category: 'Open Elective', credit: 3, strength: 2 },
+        { no: 35, slot: 'G', code: '21MEO102T', title: 'Reverse Engineering and 3D Printing', category: 'Open Elective', credit: 3, strength: 2 },
+        { no: 36, slot: 'G', code: '21MEO103T', title: 'Fundamentals of Biomechanics', category: 'Open Elective', credit: 3, strength: 2 },
+        { no: 37, slot: 'G', code: '21MEO104T', title: 'TQM and Reliability Engineering', category: 'Open Elective', credit: 3, strength: 5 },
+        { no: 38, slot: 'G', code: '21MEO105T', title: 'Occupational Safety and Disaster Management', category: 'Open Elective', credit: 3, strength: 2 },
+        { no: 39, slot: 'G', code: '21MEO106T', title: 'Introduction to Robotics', category: 'Open Elective', credit: 3, strength: 5 },
+        { no: 40, slot: 'G', code: '21MEO110T', title: 'Energy Systems for Sustainable Buildings', category: 'Open Elective', credit: 3, strength: 7 },
+        { no: 41, slot: 'G', code: '21MEO112T', title: 'Renewable Energy Sources and Application', category: 'Open Elective', credit: 3, strength: 7 },
+        { no: 42, slot: 'G', code: '21MEO115T', title: 'Introduction to Drones', category: 'Open Elective', credit: 3, strength: 2 },
+        { no: 43, slot: 'G', code: '21NTO301T', title: 'Applications of Nanotechnology', category: 'Open Elective', credit: 3, strength: 2 },
+        { no: 44, slot: 'G', code: '21NTO304T', title: 'Environmental Nanotechnology', category: 'Open Elective', credit: 3, strength: 2 },
+        { no: 45, slot: 'G', code: '21NTO307T', title: 'Nanocomputing', category: 'Open Elective', credit: 3, strength: 2 },
+        { no: 46, slot: 'G', code: '21NTO308T', title: 'Smart Sensor Systems', category: 'Open Elective', credit: 3, strength: 2 },
+        { no: 47, slot: 'G', code: '21NTO309T', title: '2D Materials and Applications', category: 'Open Elective', credit: 3, strength: 2 }
+    ];
+
+    const courseList = document.getElementById('course-list');
+    const searchInput = document.getElementById('search-input');
+    const sortSelect = document.getElementById('sort-select');
+    const filterButtons = document.querySelectorAll('.filter-btn');
+    
+    let categoryFilter = 'all';
+    let searchTerm = '';
+    let sortOrder = 'default';
+
+    let categoryChart, strengthChart;
+
+    const cursorGlow = document.getElementById('cursor-glow');
+    document.addEventListener('mousemove', (e) => {
+        cursorGlow.style.left = `${e.clientX}px`;
+        cursorGlow.style.top = `${e.clientY}px`;
+    });
+
+    // Function to call Gemini API for course insights
+    async function getCourseInsight(courseTitle, courseCode, courseCategory, cardElement) {
+        const insightDiv = cardElement.querySelector('.course-insight');
+        const insightButton = cardElement.querySelector('.insight-button');
+        
+        insightDiv.innerHTML = '<span class="text-gray-500">Generating insight...</span>';
+        insightButton.disabled = true;
+
+        let chatHistory = [];
+        const prompt = `Provide a detailed insight into why a student specializing in Information Technology should choose the course titled '${courseTitle}' (Course Code: ${courseCode}, Category: ${courseCategory}). Focus on its relevance in the future tech market, potential career advantages, and how it contributes to high earning potential. Keep the response concise, around 3-4 sentences.`;
+        chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+        const payload = { contents: chatHistory };
+        const apiKey = ""; // Canvas will provide this at runtime
+
+        try {
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const result = await response.json();
+
+            if (result.candidates && result.candidates.length > 0 &&
+                result.candidates[0].content && result.candidates[0].content.parts &&
+                result.candidates[0].content.parts.length > 0) {
+                const text = result.candidates[0].content.parts[0].text;
+                insightDiv.innerHTML = `<p class="text-sm text-gray-400 mt-2">${text}</p>`;
+            } else {
+                insightDiv.innerHTML = '<p class="text-sm text-red-400 mt-2">Failed to generate insight. Please try again.</p>';
+            }
+        } catch (error) {
+            console.error('Error calling Gemini API:', error);
+            insightDiv.innerHTML = '<p class="text-sm text-red-400 mt-2">Error generating insight. Check console for details.</p>';
+        } finally {
+            insightButton.disabled = false;
+        }
+    }
+
+    const renderCourses = () => {
+        let filteredCourses = [...courses];
+
+        if (categoryFilter !== 'all') {
+            filteredCourses = filteredCourses.filter(course => course.category === categoryFilter);
+        }
+
+        if (searchTerm) {
+            filteredCourses = filteredCourses.filter(course => 
+                course.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                course.code.toLowerCase().includes(searchTerm.toLowerCase())
+            );
+        }
+
+        switch(sortOrder) {
+            case 'strength-desc':
+                filteredCourses.sort((a, b) => b.strength - a.strength);
+                break;
+            case 'strength-asc':
+                filteredCourses.sort((a, b) => a.strength - b.strength);
+                break;
+            case 'title-asc':
+                filteredCourses.sort((a, b) => a.title.localeCompare(b.title));
+                break;
+            case 'default':
+                filteredCourses.sort((a,b) => a.no - b.no);
+                break;
+        }
+
+        courseList.innerHTML = '';
+        if (filteredCourses.length === 0) {
+            courseList.innerHTML = `<div class="text-center p-8 bg-gray-900 rounded-2xl glowing-box border border-gray-800"><p class="text-gray-400">No courses match your criteria.</p></div>`;
+        } else {
+            filteredCourses.forEach(course => {
+                const card = document.createElement('div');
+                card.className = `bg-gray-900 p-6 rounded-2xl glowing-box border-l-4 card-enter ${course.category === 'Professional Elective' ? 'border-blue-500' : 'border-purple-500'} shadow-lg`;
+                card.innerHTML = `
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h3 class="font-semibold text-lg text-white">${course.title}</h3>
+                            <p class="text-sm text-gray-400">${course.code}</p>
+                        </div>
+                        <span class="text-xs font-semibold px-3 py-1 rounded-full ${course.category === 'Professional Elective' ? 'bg-blue-700 text-white' : 'bg-purple-700 text-white'}">${course.category}</span>
+                    </div>
+                    <div class="mt-4 flex justify-between items-center text-sm text-gray-300">
+                        <span><strong>Slot:</strong> ${course.slot}</span>
+                        <span><strong>Credit:</strong> ${course.credit}</span>
+                        <span><strong>Max Strength:</strong> <span class="font-bold text-lg text-blue-400">${course.strength}</span></span>
+                    </div>
+                    <button class="insight-button mt-4 bg-gray-700 hover:bg-gray-600 text-white text-sm px-4 py-2 rounded-lg transition-colors duration-200">Get Insight ✨</button>
+                    <div class="course-insight mt-3"></div>
+                `;
+                courseList.appendChild(card);
+
+                // Add event listener for the insight button
+                card.querySelector('.insight-button').addEventListener('click', () => {
+                    getCourseInsight(course.title, course.code, course.category, card);
+                });
+            });
+        }
+        updateStrengthChart(filteredCourses);
+    };
+    
+    const initCharts = () => {
+        const professionalCount = courses.filter(c => c.category === 'Professional Elective').length;
+        const openCount = courses.length - professionalCount;
+
+        const catCtx = document.getElementById('categoryChart').getContext('2d');
+        categoryChart = new Chart(catCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Professional Electives', 'Open Electives'],
+                datasets: [{
+                    label: 'Course Categories',
+                    data: [professionalCount, openCount],
+                    backgroundColor: ['rgba(0, 180, 180, 0.7)', 'rgba(180, 0, 180, 0.7)'], /* Softer neon */
+                    borderColor: ['#1a1a1a'], 
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            color: '#e0e0e0' 
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                if (context.parsed !== null) {
+                                    label += context.parsed;
+                                }
+                                return label;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        const strengthCtx = document.getElementById('strengthChart').getContext('2d');
+        strengthChart = new Chart(strengthCtx, {
+            type: 'bar',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Max Strength',
+                    data: [],
+                    backgroundColor: 'rgba(0, 180, 0, 0.6)', /* Softer green */
+                    borderColor: 'rgba(0, 180, 0, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        beginAtZero: true,
+                        ticks: {
+                            color: '#e0e0e0' 
+                        },
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)' 
+                        }
+                    },
+                    y: {
+                        ticks: {
+                           autoSkip: false,
+                           fontSize: 10,
+                           color: '#e0e0e0', 
+                           callback: function(value, index, values) {
+                               const label = this.getLabelForValue(value);
+                               return label.length > 20 ? label.substring(0, 20) + '...' : label;
+                           }
+                        },
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)' 
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                }
+            }
+        });
+    }
+
+    const updateStrengthChart = (data) => {
+        const sortedData = [...data].sort((a,b) => b.strength - a.strength).slice(0, 15); // Show top 15 by strength
+        strengthChart.data.labels = sortedData.map(c => c.title);
+        strengthChart.data.datasets[0].data = sortedData.map(c => c.strength);
+        strengthChart.update();
+    };
+
+    filterButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            filterButtons.forEach(btn => {
+                btn.classList.remove('bg-blue-600', 'text-white');
+                btn.classList.add('bg-gray-700', 'text-gray-200');
+            });
+            button.classList.add('bg-blue-600', 'text-white');
+            button.classList.remove('bg-gray-700', 'text-gray-200');
+            categoryFilter = button.dataset.filter;
+            renderCourses();
+        });
+    });
+
+    searchInput.addEventListener('input', (e) => {
+        searchTerm = e.target.value;
+        renderCourses();
+    });
+
+    sortSelect.addEventListener('change', (e) => {
+        sortOrder = e.target.value;
+        renderCourses();
+    });
+
+    initCharts();
+    renderCourses();
+});
+</script>
+</body>
+</html>
